@@ -1,0 +1,369 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'Standard RAG Workshop'
+Parameters:
+  DeploymentArtifactsS3BucketName:
+    Description: The S3 bucket that contains the artifacts for deployment
+    Type: String
+    Default: <Your S3 bucket name that contains this file - py312_opensearch-py_requests_and_requests-aws4auth.zip>
+  LambdaLayerS3FileKey:
+    Description: The name of the zip file in S3 that contains the Lambda Layer content
+    Type: String
+    Default: py312_opensearch-py_requests_and_requests-aws4auth.zip
+  CodeRepositoryURL:
+    Description: The URL to the code repository
+    Type: String
+    Default: https://github.com/aws-samples/reinvent2023-aim-329
+Resources:
+  WorkshopS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join [ "-", [ Ref: AWS::AccountId, "standard-rag" ] ]
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: false
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: "AES256"
+  AOSSExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: "StandardRAG-AOSSExecutionRole"
+      Description: AOSS execution role for standard-rag collection
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - opensearch.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+        - 'arn:aws:iam::aws:policy/IAMFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonBedrockFullAccess'
+        - 'arn:aws:iam::aws:policy/CloudWatchFullAccess'
+        - 'arn:aws:iam::aws:policy/CloudWatchFullAccessV2'        
+      Policies:
+        - PolicyName: aossrolepolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - aoss:APIAccessAll
+                Resource:
+                  - !Join [ "", [ "arn:aws:aoss:", !Ref AWS::Region, ":", !Ref AWS::AccountId, ":collection/*" ] ]
+                  - !Join [ "", [ "arn:aws:aoss:", !Ref AWS::Region, ":", !Ref AWS::AccountId, ":index/*/*" ] ]
+    DependsOn:
+      - WorkshopS3Bucket
+  AOSSIndexCreationLambdaFunctionExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: "StandardRAG-AOICLambdaFunctionExecutionRole"
+      Description: Lambda execution role for standard-rag
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/CloudWatchFullAccess'
+        - 'arn:aws:iam::aws:policy/CloudWatchFullAccessV2'
+      Policies:
+        - PolicyName: lambdarolepolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - aoss:APIAccessAll
+                Resource:
+                  - !Join [ "", [ "arn:aws:aoss:", !Ref AWS::Region, ":", !Ref AWS::AccountId, ":collection/*" ] ]
+                  - !Join [ "", [ "arn:aws:aoss:", !Ref AWS::Region, ":", !Ref AWS::AccountId, ":index/*/*" ] ]
+  BedrockAndSMExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: "StandardRAG-BedrockAndSMExecutionRole"
+      Description: Bedrock and SM notebook execution role for standard-rag
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - sagemaker.amazonaws.com
+                - bedrock.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+        - 'arn:aws:iam::aws:policy/IAMFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonBedrockFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonSageMakerFullAccess'
+        - 'arn:aws:iam::aws:policy/AWSCodeCommitFullAccess'
+        - 'arn:aws:iam::aws:policy/CloudWatchFullAccess'
+        - 'arn:aws:iam::aws:policy/CloudWatchFullAccessV2' 
+      Policies:
+        - PolicyName: bedrockandsmrolepolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - aoss:APIAccessAll
+                Resource:
+                  - !Join [ "", [ "arn:aws:aoss:", !Ref AWS::Region, ":", !Ref AWS::AccountId, ":collection/*" ] ]
+                  - !Join [ "", [ "arn:aws:aoss:", !Ref AWS::Region, ":", !Ref AWS::AccountId, ":index/*/*" ] ]            
+    DependsOn:
+      - WorkshopS3Bucket
+  AOSSDataAccessPolicy:
+    Type: 'AWS::OpenSearchServerless::AccessPolicy'
+    Properties:
+      Name: standard-rag-dap
+      Type: data
+      Description: Data access policy for standard-rag collection
+      Policy: !Sub >-
+        [{"Description":"Access for cfn user","Rules":[{"ResourceType":"index","Resource":["index/standard-rag-collection/*"],"Permission":["aoss:*"]},
+        {"ResourceType":"collection","Resource":["collection/standard-rag-collection"],"Permission":["aoss:*"]}],
+        "Principal":["arn:aws:iam::${AWS::AccountId}:role/StandardRAG-AOSSExecutionRole", "arn:aws:iam::${AWS::AccountId}:role/StandardRAG-BedrockAndSMExecutionRole",
+        "arn:aws:iam::${AWS::AccountId}:role/StandardRAG-AOICLambdaFunctionExecutionRole"]}]
+    DependsOn:
+      - AOSSExecutionRole
+      - AOSSIndexCreationLambdaFunctionExecutionRole
+      - BedrockAndSMExecutionRole
+  AOSSNetworkPolicy:
+    Type: 'AWS::OpenSearchServerless::SecurityPolicy'
+    Properties:
+      Name: standard-rag-np
+      Type: network
+      Description: Network policy for standard-rag collection
+      Policy: >-
+        [{"Rules":[{"ResourceType":"collection","Resource":["collection/standard-rag-collection"]}, {"ResourceType":"dashboard","Resource":["collection/standard-rag-collection"]}],"AllowFromPublic":true}]
+  AOSSEncryptionPolicy:
+    Type: 'AWS::OpenSearchServerless::SecurityPolicy'
+    Properties:
+      Name: standard-rag-sp
+      Type: encryption
+      Description: Encryption policy for standard-rag collection
+      Policy: >-
+        {"Rules":[{"ResourceType":"collection","Resource":["collection/standard-rag-collection"]}],"AWSOwnedKey":true}
+  AOSSCollection:
+    Type: 'AWS::OpenSearchServerless::Collection'
+    Properties:
+      Name: standard-rag-collection
+      Type: VECTORSEARCH
+      Description: Collection to hold the embeddings for the content to query
+    DependsOn:
+      - AOSSEncryptionPolicy
+      - AOSSNetworkPolicy
+      - AOSSDataAccessPolicy
+  LambdaLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: standard-rag-py312_opensearch-py_requests_and_requests-aws4auth
+      Description: Python 3.12 opensearch-py, requests and requests-aws4auth packages
+      CompatibleArchitectures:
+        - x86_64
+      CompatibleRuntimes:
+        - python3.12
+      Content:
+        S3Bucket:
+          Ref: DeploymentArtifactsS3BucketName
+        S3Key:
+          Ref: LambdaLayerS3FileKey
+  AOSSIndexCreationLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Function to create the AOSS Index
+      Handler: index.lambda_handler
+      FunctionName: standard-rag-aoss-index-creation
+      MemorySize: 128
+      Runtime: python3.12
+      Role: !GetAtt AOSSIndexCreationLambdaFunctionExecutionRole.Arn
+      Timeout: 240
+      Environment:
+        Variables:
+          REGION:
+            Ref: AWS::Region
+          AOSSCOLLECTIONID: !GetAtt AOSSCollection.Id
+          AOSSINDEXNAME: standard-rag-index
+      Code:
+        ZipFile: |
+          import botocore.session
+          from botocore.credentials import Credentials
+          import cfnresponse
+          import json
+          from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
+          import os
+          import time
+
+
+          # Function to create the OpenSearch client for AOSS
+          def get_os_client(region, collection_id):
+              host = "{}.{}.aoss.amazonaws.com".format(collection_id, region)
+              # Get the credentials from the boto3 session
+              credentials = botocore.session.Session().get_credentials()
+              auth = AWSV4SignerAuth(credentials, region, 'aoss')
+              # Create an OpenSearch client and use the request-signer
+              os_client = OpenSearch(
+                  hosts=[{'host': host, 'port': 443}],
+                  http_auth=auth,
+                  use_ssl=True,
+                  verify_certs=True,
+                  connection_class=RequestsHttpConnection,
+                  pool_maxsize=20,
+                  timeout=3000
+              )
+              return os_client
+
+
+          # Function to create the OpenSearch index
+          def create_index(aoss_py_client, index_name):
+              knn_index = {
+                  "settings": {
+                      "index.knn": True,
+                  },
+                  "mappings": {
+                      "properties": {
+                          "vector": {
+                              "type": "knn_vector",
+                              "dimension": 1536,
+                              "method": {
+                                "engine": "faiss",
+                                "name": "hnsw"
+                              }
+                          },
+                          "text": {
+                              "type": "text"
+                          },
+                          "metadata": {
+                              "type": "text"
+                          }
+                      }
+                  }
+              }
+              aoss_py_client.indices.create(index=index_name, body=knn_index, ignore=400)
+
+
+          # Function to delete the OpenSearch index
+          def delete_index(aoss_py_client, index_name):
+              aoss_py_client.indices.delete(index=index_name, ignore=400)
+
+
+           # Lambda handler function
+          def lambda_handler(event, context):
+              response_data = {}
+              response_data['Data'] = ''
+              print(event)
+              print(context)
+              physical_record_id = context.log_group_name
+              try:
+                  # Get the input parameters
+                  region = os.environ['REGION']
+                  collection_id = os.environ['AOSSCOLLECTIONID']
+                  index_name = os.environ['AOSSINDEXNAME']
+                  # Create the client
+                  aoss_py_client = get_os_client(region, collection_id)
+                  # Process based on event type
+                  if event['RequestType'] == 'Create':
+                      # Create the AOSS index
+                      print('Creating the AOSS index "{}"'.format(index_name))                     
+                      create_index(aoss_py_client, index_name)
+                      print('Created the AOSS index "{}"'.format(index_name))
+                      print('Waiting for 60 seconds...')
+                      time.sleep(60)
+                      print('Completed waiting for 60 seconds.')
+                  elif event['RequestType'] == 'Delete':
+                      # Delete the AOSS index
+                      print('Deleting the AOSS index "{}"'.format(index_name))
+                      delete_index(aoss_py_client, index_name)
+                      print('Deleted the AOSS index "{}"'.format(index_name))
+                      print('Waiting for 60 seconds...')
+                      time.sleep(60)
+                      print('Completed waiting for 60 seconds.')
+                  else:
+                      print('Skipped creating/deleting the AOSS index "{}"'.format(index_name))
+                  # Send the SUCCESS response to CloudFormation
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
+              except Exception as exception:
+                  print('Exception occurred :: {}'.format(exception))
+                  # Send the FAILED response to CloudFormation
+                  cfnresponse.send(event, context, cfnresponse.FAILED, response_data)
+      Layers:
+        - !GetAtt LambdaLayer.LayerVersionArn
+    DependsOn:
+      - AOSSCollection
+      - LambdaLayer
+      - AOSSIndexCreationLambdaFunctionExecutionRole
+  AOSSIndexCreationLambdaFunctionInvoke:
+    Type: AWS::CloudFormation::CustomResource
+    Version: "1.0"
+    Properties:
+      ServiceToken: !GetAtt AOSSIndexCreationLambdaFunction.Arn
+    DependsOn:
+      - AOSSIndexCreationLambdaFunction
+  BedrockKB:
+    Type: 'AWS::Bedrock::KnowledgeBase'
+    Properties:
+      Name: standard-rag-bedrock-kb
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Join [ "", [ "arn:aws:bedrock:", !Ref AWS::Region, "::foundation-model/amazon.titan-embed-text-v1" ] ]
+      StorageConfiguration:
+        OpensearchServerlessConfiguration:
+          CollectionArn: !GetAtt AOSSCollection.Arn
+          FieldMapping:
+            MetadataField: metadata
+            TextField: text
+            VectorField: vector
+          VectorIndexName: standard-rag-index
+        Type: OPENSEARCH_SERVERLESS
+      RoleArn: !GetAtt BedrockAndSMExecutionRole.Arn
+      Description: Knowledge Base to provide the RAG capability
+    DependsOn:
+      - AOSSCollection
+      - AOSSIndexCreationLambdaFunctionInvoke
+      - WorkshopS3Bucket
+      - BedrockAndSMExecutionRole
+  BedrockKBDataSource:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      Name: standard-rag-bedrock-kb-ds
+      Description: Data Source for the Knowledge Base that provides the RAG capability
+      KnowledgeBaseId: !GetAtt BedrockKB.KnowledgeBaseId
+      DataSourceConfiguration:
+        S3Configuration:
+          BucketArn: !GetAtt WorkshopS3Bucket.Arn
+        Type: S3
+    DependsOn:
+      - BedrockKB
+  CodeRepository:
+    Type: AWS::SageMaker::CodeRepository
+    Properties:
+      GitConfig:
+          RepositoryUrl:
+            Ref: CodeRepositoryURL
+  SMNotebookInstance:
+    Type: AWS::SageMaker::NotebookInstance
+    Properties:
+      NotebookInstanceName: standard-rag-instance
+      PlatformIdentifier: notebook-al2-v2
+      InstanceType: ml.t3.medium
+      RoleArn: !GetAtt BedrockAndSMExecutionRole.Arn
+      DefaultCodeRepository: !GetAtt CodeRepository.CodeRepositoryName
+    DependsOn:
+      - BedrockAndSMExecutionRole
+      - CodeRepository
