@@ -1,6 +1,6 @@
-## AIM329 - Build a chat assistant with Amazon Bedrock
+## Build a chat assistant with Amazon Bedrock
 
-This repository contains the code samples related to the AIM329 session of AWS re:Invent 2023. In this session, participants will explore how to use the [Retrieval Augmented Generation (RAG)](https://docs.aws.amazon.com/sagemaker/latest/dg/jumpstart-foundation-models-customize-rag.html) architecture with [Amazon Bedrock](https://aws.amazon.com/bedrock/) and [Amazon OpenSearch Serverless (AOSS)](https://aws.amazon.com/opensearch-service/features/serverless/) to quickly build a secure chat assistant that uses the most up-to-date information to converse with users. Participants will also learn how this chat assistant will use dialog-guided information retrieval to respond to users.
+This repository contains the code samples rthat will let participants explore how to use the [Retrieval Augmented Generation (RAG)](https://docs.aws.amazon.com/sagemaker/latest/dg/jumpstart-foundation-models-customize-rag.html) architecture with [Amazon Bedrock](https://aws.amazon.com/bedrock/) and [Amazon OpenSearch Serverless (AOSS)](https://aws.amazon.com/opensearch-service/features/serverless/) to quickly build a secure chat assistant that uses the most up-to-date information to converse with users. Participants will also learn how this chat assistant will use dialog-guided information retrieval to respond to users.
 
 ### Overview
 
