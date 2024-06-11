@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: 'Workshop AIM329'
+Description: 'Workshop rag-with-gen-ai'
 Resources:
   OSExecutionRole:
     Type: 'AWS::IAM::Role'
@@ -66,33 +66,33 @@ Resources:
   DataAccessPolicy:
     Type: 'AWS::OpenSearchServerless::AccessPolicy'
     Properties:
-      Name: aim329-access-policy
+      Name: rag-with-gen-ai-access-policy
       Type: data
-      Description: Access policy for aim329 collection
+      Description: Access policy for rag-with-gen-ai collection
       Policy: !Sub >-
         [{"Description":"Access for cfn user","Rules":[{"ResourceType":"index","Resource":["index/*/*"],"Permission":["aoss:*"]},
-        {"ResourceType":"collection","Resource":["collection/aim329"],"Permission":["aoss:*"]}],
+        {"ResourceType":"collection","Resource":["collection/rag-with-gen-ai"],"Permission":["aoss:*"]}],
         "Principal":["arn:aws:iam::${AWS::AccountId}:role/OpenSearchExecutionRole", "arn:aws:iam::${AWS::AccountId}:role/SageMakerExecutionRole"]}]
   NetworkPolicy:
     Type: 'AWS::OpenSearchServerless::SecurityPolicy'
     Properties:
-      Name: aim329-network-policy
+      Name: rag-with-gen-ai-network-policy
       Type: network
-      Description: Network policy for aim329 collection
+      Description: Network policy for rag-with-gen-ai collection
       Policy: >-
-        [{"Rules":[{"ResourceType":"collection","Resource":["collection/aim329"]}, {"ResourceType":"dashboard","Resource":["collection/aim329"]}],"AllowFromPublic":true}]
+        [{"Rules":[{"ResourceType":"collection","Resource":["collection/rag-with-gen-ai"]}, {"ResourceType":"dashboard","Resource":["collection/aim329"]}],"AllowFromPublic":true}]
   EncryptionPolicy:
     Type: 'AWS::OpenSearchServerless::SecurityPolicy'
     Properties:
-      Name: aim329-security-policy
+      Name: rag-with-gen-ai-security-policy
       Type: encryption
-      Description: Encryption policy for aim329 collection
+      Description: Encryption policy for rag-with-gen-ai collection
       Policy: >-
-        {"Rules":[{"ResourceType":"collection","Resource":["collection/aim329"]}],"AWSOwnedKey":true}
+        {"Rules":[{"ResourceType":"collection","Resource":["collection/rag-with-gen-ai"]}],"AWSOwnedKey":true}
   Collection:
     Type: 'AWS::OpenSearchServerless::Collection'
     Properties:
-      Name: aim329
+      Name: rag-with-gen-ai
       Type: VECTORSEARCH
       Description: Collection to hold the embeddings for the content to query via chatbot
     DependsOn:
@@ -103,11 +103,12 @@ Resources:
     Type: AWS::SageMaker::CodeRepository
     Properties:
       GitConfig:
+          Branch: GVC204
           RepositoryUrl: https://github.com/aws-samples/reinvent2023-aim-329
   NotebookInstance:
     Type: AWS::SageMaker::NotebookInstance
     Properties:
-      NotebookInstanceName: aim329
+      NotebookInstanceName: rag-with-gen-ai
       PlatformIdentifier: notebook-al2-v2
       InstanceType: ml.m5.xlarge
       RoleArn: !GetAtt SMExecutionRole.Arn
